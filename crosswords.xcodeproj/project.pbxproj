@@ -46,7 +46,8 @@
 		F34252292ED81603006D090D /* FirebaseCore in Frameworks */ = {isa = PBXBuildFile; productRef = F34252282ED81603006D090D /* FirebaseCore */; };
 		F342522B2ED81603006D090D /* FirebaseFirestore in Frameworks */ = {isa = PBXBuildFile; productRef = F342522A2ED81603006D090D /* FirebaseFirestore */; };
 		F352635E2F12EADC0049F0B6 /* Constants.swift in Sources */ = {isa = PBXBuildFile; fileRef = F352635D2F12EAD80049F0B6 /* Constants.swift */; };
-		F35263612F1306FB0049F0B6 /* UIScreen+Extensions.swift in Sources */ = {isa = PBXBuildFile; fileRef = F35263602F1306F40049F0B6 /* UIScreen+Extensions.swift */; };
+		D0D0000000000000000000A2 /* WindowLayout.swift in Sources */ = {isa = PBXBuildFile; fileRef = D0D0000000000000000000A1 /* WindowLayout.swift */; };
+		D0D0000000000000000000B2 /* CrosswordKeyboardView.swift in Sources */ = {isa = PBXBuildFile; fileRef = D0D0000000000000000000B1 /* CrosswordKeyboardView.swift */; };
 		F35263632F1307150049F0B6 /* ShapeStyle+Extensions.swift in Sources */ = {isa = PBXBuildFile; fileRef = F35263622F1307150049F0B6 /* ShapeStyle+Extensions.swift */; };
 		F35263652F1307B60049F0B6 /* UserSettings.swift in Sources */ = {isa = PBXBuildFile; fileRef = F35263642F1307B20049F0B6 /* UserSettings.swift */; };
 		F35263692F20147C0049F0B6 /* ToolbarContent+Extensions.swift in Sources */ = {isa = PBXBuildFile; fileRef = F35263682F20146E0049F0B6 /* ToolbarContent+Extensions.swift */; };
@@ -105,7 +106,8 @@
 		F342061A2F25B6A200C6E41D /* noSolution.json */ = {isa = PBXFileReference; lastKnownFileType = text.json; path = noSolution.json; sourceTree = "<group>"; };
 		F342061C2F25BA3600C6E41D /* Collections+Extensions.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Collections+Extensions.swift"; sourceTree = "<group>"; };
 		F352635D2F12EAD80049F0B6 /* Constants.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Constants.swift; sourceTree = "<group>"; };
-		F35263602F1306F40049F0B6 /* UIScreen+Extensions.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "UIScreen+Extensions.swift"; sourceTree = "<group>"; };
+		D0D0000000000000000000A1 /* WindowLayout.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WindowLayout.swift; sourceTree = "<group>"; };
+		D0D0000000000000000000B1 /* CrosswordKeyboardView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CrosswordKeyboardView.swift; sourceTree = "<group>"; };
 		F35263622F1307150049F0B6 /* ShapeStyle+Extensions.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "ShapeStyle+Extensions.swift"; sourceTree = "<group>"; };
 		F35263642F1307B20049F0B6 /* UserSettings.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = UserSettings.swift; sourceTree = "<group>"; };
 		F35263682F20146E0049F0B6 /* ToolbarContent+Extensions.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "ToolbarContent+Extensions.swift"; sourceTree = "<group>"; };
@@ -156,6 +158,7 @@
 				1C3D87E7274976BA001A7591 /* ChangeFocusUtils.swift */,
 				1CBED35227BE10750051E83C /* ColorSchemeUtil.swift */,
 				F352635D2F12EAD80049F0B6 /* Constants.swift */,
+				D0D0000000000000000000A1 /* WindowLayout.swift */,
 				F32FD94F2AF6125100CC90E1 /* CrosswordUtils.swift */,
 				F38D69BC2EE4D10A001E6096 /* DataUtils.swift */,
 				F32398D22F24350800EDED49 /* DevOverridesUtils.swift */,
@@ -174,6 +177,7 @@
 			isa = PBXGroup;
 			children = (
 				1C6A26B624CA7340002F8DAD /* CrosswordCellView.swift */,
+				D0D0000000000000000000B1 /* CrosswordKeyboardView.swift */,
 				1C73206E24C4F44000240AF8 /* CrosswordListView.swift */,
 				F3B1F8862F28804E0052682B /* CrosswordListViewToolbarView.swift */,
 				F3B992412AD4B67C00C29F2D /* CrosswordListItemView.swift */,
@@ -249,7 +253,6 @@
 				F352636A2F2014A30049F0B6 /* UIBarButtonItem+Extensions.swift */,
 				F32398D62F2487CC00EDED49 /* UIButtonWithSize.swift */,
 				1CBB3F562584040000BD1B5A /* UITextField+Toolbar.swift */,
-				F35263602F1306F40049F0B6 /* UIScreen+Extensions.swift */,
 			);
 			path = ViewModifiers;
 			sourceTree = "<group>";
@@ -362,6 +365,8 @@
 				1C73206824C4F44000240AF8 /* AppDelegate.swift in Sources */,
 				F3B1F8872F28805D0052682B /* CrosswordListViewToolbarView.swift in Sources */,
 				F352635E2F12EADC0049F0B6 /* Constants.swift in Sources */,
+				D0D0000000000000000000A2 /* WindowLayout.swift in Sources */,
+				D0D0000000000000000000B2 /* CrosswordKeyboardView.swift in Sources */,
 				F35263632F1307150049F0B6 /* ShapeStyle+Extensions.swift in Sources */,
 				F3B1F0C02F65F38800612BA4 /* OnKeyPressUtils.swift in Sources */,
 				1CBED35327BE10750051E83C /* ColorSchemeUtil.swift in Sources */,
@@ -378,7 +383,6 @@
 				F32398D72F2487E300EDED49 /* UIButtonWithSize.swift in Sources */,
 				1C73206F24C4F44000240AF8 /* CrosswordListView.swift in Sources */,
 				1C1EA90F24DE765D00A67BA9 /* SettingsView.swift in Sources */,
-				F35263612F1306FB0049F0B6 /* UIScreen+Extensions.swift in Sources */,
 				1CA8EA492974AA6400168E83 /* SolvedCrosswordStatistics.swift in Sources */,
 				1C6A26B724CA7340002F8DAD /* CrosswordCellView.swift in Sources */,
 				F35263652F1307B60049F0B6 /* UserSettings.swift in Sources */,

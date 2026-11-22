@@ -94,6 +94,14 @@ struct CrosswordListView: View {
                     if self.selectedCrossword.isEmpty {
                         self.refreshCrosswords()
                     }
+                    #if DEBUG
+                        // `-openFirst YES` opens the newest crossword at launch, for screenshots without touch input
+                        if UserDefaults.standard.bool(forKey: "openFirst"), self.selectedCrossword.isEmpty,
+                            let crossword = filteredCrosswords.first
+                        {
+                            self.selectedCrossword = [crossword]
+                        }
+                    #endif
                 })
                 .navigationBarTitle("Crosswords")
                 .toolbar {

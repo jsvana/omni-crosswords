@@ -19,6 +19,17 @@ enum Constants {
     static let mandatedToolbarGroupPadding: CGFloat = 25.0
     static let crosswordToolbarPadding: CGFloat = 5.0
     static let statisticsPageMaxHeight: CGFloat = 200.0
+    // window sizes that select a layout, see CrosswordLayoutMode
+    static let wideLayoutMinWidth: CGFloat = 700.0
+    static let wideLayoutMaxHeight: CGFloat = 800.0
+    static let compactLayoutMaxHeight: CGFloat = 700.0
+    static let customToolbarMinWindowHeight: CGFloat = 700.0
+    // built-in keyboard layouts
+    static let maxWideCellSize: CGFloat = 48.0
+    static let minFittedCellSize: CGFloat = 22.0
+    static let compactKeyHeight: CGFloat = 40.0
+    static let wideKeyHeight: CGFloat = 46.0
+    static let footerHeight: CGFloat = 28.0
     static let gold: UIColor = UIColor(red: 255.0 / 255.0, green: 215.0 / 255.0, blue: 0.0 / 255.0, alpha: 1.0)
     static let allSubscriptions: [String] = [
         "LA Times", "The Atlantic", "Newsday",

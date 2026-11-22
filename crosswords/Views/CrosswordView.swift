@@ -14,6 +14,7 @@ struct CrosswordView: View {
     @Environment(\.dismiss) private var dismiss
     @Environment(\.horizontalSizeClass) private var horizontalSizeClass
     @Environment(\.managedObjectContext) private var managedObjectContext
+    @Environment(\.windowSize) private var windowSize
 
     @ObservedObject var crossword: Crossword
     @ObservedObject var userSettings: UserSettings
@@ -28,6 +29,10 @@ struct CrosswordView: View {
     @State var becomeFirstResponder: Bool = false
     @State var boxWidth: CGFloat = 0.0
     @State var viewWidth: CGFloat = 0.0
+    // space the grid may fill in the compact and wide layouts
+    @State var gridAreaSize: CGSize = .zero
+    @State var topSafeAreaInset: CGFloat = 0.0
+    @State var inputRelay = CrosswordInputRelay()
 
     @State var isZoomed: Bool = false
     @State var isRebusMode: Bool = false
@@ -35,11 +40,9 @@ struct CrosswordView: View {
 
     // height of components. does not include keyboard height
     var componentHeights: CGFloat {
-        let windowScene = UIApplication.shared.connectedScenes.first as? UIWindowScene
-        let window = windowScene?.windows.filter { $0.isKeyWindow }.first
-        let statusBarHeight = window?.windowScene?.statusBarManager?.statusBarFrame.height ?? 0
         let crosswordHeight = self.getInitialBoxWidth() * CGFloat(self.crossword.height)
-        let barHeights: CGFloat = CGFloat(Constants.keybordToolbarHeight) + statusBarHeight
+        // the top inset covers the status bar and, when it is showing, the navigation bar
+        let barHeights: CGFloat = CGFloat(Constants.keybordToolbarHeight) + self.topSafeAreaInset
 
         return barHeights + crosswordHeight - 10
     }
@@ -53,6 +56,18 @@ struct CrosswordView: View {
         return prefix + self.crossword.outletName! + " - " + TimeUtils.toSmallDateFormat(date)
     }
 
+    var layoutMode: CrosswordLayoutMode {
+        return CrosswordLayoutMode.forWindow(self.windowSize)
+    }
+
+    var currentClueID: String {
+        return CrosswordUtils.getClueID(tag: self.focusedTag, crossword: self.crossword, goingAcross: self.goingAcross)
+    }
+
+    var currentClue: String {
+        return CrosswordUtils.getClue(focusedTag: self.focusedTag, crossword: self.crossword, goingAcross: self.goingAcross)
+    }
+
     init(crossword: Crossword, userSettings: UserSettings) {
         self.crossword = crossword
         self.userSettings = userSettings
@@ -64,31 +79,129 @@ struct CrosswordView: View {
     }
 
     var body: some View {
+        Group {
+            switch self.layoutMode {
+            case .standard:
+                self.standardBody
+            case .compact:
+                self.compactBody
+            case .wide:
+                self.wideBody
+            }
+        }
+        .overlay(alignment: .bottom, content: self.maybePauseScreen)
+        .gesture(
+            DragGesture(minimumDistance: 30, coordinateSpace: .local)
+                .onEnded({ value in
+                    if value.translation.width < 0 && self.focusedTag != -1 {
+                        // left
+                        ChangeFocusUtils.goToPreviousClue(
+                            focusedTag: self.$focusedTag,
+                            crossword: self.crossword,
+                            userSettings: self.userSettings,
+                            goingAcross: self.$goingAcross,
+                            isHighlighted: self.$highlighted)
+                    }
+
+                    if value.translation.width > 0 && self.focusedTag != -1 {
+                        // right
+                        ChangeFocusUtils.goToNextClue(
+                            focusedTag: self.$focusedTag,
+                            crossword: self.crossword,
+                            userSettings: self.userSettings,
+                            goingAcross: self.$goingAcross,
+                            isHighlighted: self.$highlighted)
+                    }
+                })
+        )
+        .toolbar(self.showCustomToolbar() || self.layoutMode != .standard ? .hidden : .automatic)
+        .navigationBarTitle(Text(verbatim: self.displayTitle), displayMode: .inline)
+        .navigationBarColor(self.crossword.solved ? .systemGreen : .systemBackground)
+        .toolbar {
+            ToolbarItem(placement: .topBarLeading) {
+                CrosswordViewLeadingToolbarView(goBack: self.goBack)
+            }
+            .hideSharedBackgroundIfAvailable()
+
+            ToolbarItemGroup(placement: .topBarTrailing) {
+                CrosswordSettingsToolbarButtonView(
+                    crosswordTitle: self.crossword.title!, author: self.crossword.author!, notes: self.crossword.notes!,
+                    copyright: self.crossword.copyright!, isSolved: self.crossword.solved, outletName: self.crossword.outletName!,
+                    isSolutionAvailable: CrosswordUtils.isSolutionAvailable(crossword: self.crossword), showSettings: self.showSettings,
+                    showSolution: self.showSolution,
+                    getProgressPercentage: { () -> CGFloat in
+                        CrosswordUtils.getCrosswordProgress(self.crossword)
+                    }, markAsSolved: self.markAsSolved, isErrorTrackingEnabled: self.$isErrorTrackingEnabled,
+                    errorTrackingEnablementSideEffect: self.errorTrackingEnablementSideEffect)
+
+                ShareCrosswordToolbarButtonView(getShareMessage: self.getShareMessage, isSolved: self.crossword.solved)
+            }
+            .hideSharedBackgroundIfAvailable()
+        }
+        .background {
+            Color.clear
+                .onGeometryChange(for: CGFloat.self) { proxy in
+                    proxy.size.width
+                } action: { newValue in
+                    if abs(self.viewWidth - newValue) > 1 {
+                        self.viewWidth = newValue
+                    }
+                    if !self.isZoomed && self.layoutMode == .standard {
+                        self.boxWidth = self.getInitialBoxWidth()
+                    }
+                }
+                .onGeometryChange(for: CGFloat.self) { proxy in
+                    proxy.safeAreaInsets.top
+                } action: { newValue in
+                    self.topSafeAreaInset = newValue
+                }
+        }
+        .onChange(of: self.layoutMode) { _, _ in
+            // folding or unfolding swaps the layout, so start it unzoomed at its own cell size
+            self.isZoomed = false
+            self.boxWidth = self.getInitialBoxWidth()
+        }
+        .onAppear(perform: self.applyDebugLaunchArguments)
+        // custom back button added in leading toolbar view
+        .navigationBarBackButtonHidden(true)
+    }
+
+    func showCustomToolbar() -> Bool {
+        // If it's a phone with a tall window, use the custom toolbar.
+        // Short windows (a closed Duo, the smallest phones) get the compact layout instead.
+        return self.horizontalSizeClass == .compact && self.windowSize.height > Constants.customToolbarMinWindowHeight
+    }
+
+    var customToolbar: some View {
+        HStack {
+            CrosswordViewLeadingToolbarView(goBack: self.goBack)
+                .padding(.leading)
+            Spacer()
+            Text(verbatim: self.displayTitle)
+                .bold()
+            Spacer()
+            HStack {
+                CrosswordSettingsToolbarButtonView(
+                    crosswordTitle: self.crossword.title!, author: self.crossword.author!, notes: self.crossword.notes!,
+                    copyright: self.crossword.copyright!, isSolved: self.crossword.solved, outletName: self.crossword.outletName!,
+                    isSolutionAvailable: CrosswordUtils.isSolutionAvailable(crossword: self.crossword), showSettings: self.showSettings,
+                    showSolution: self.showSolution,
+                    getProgressPercentage: { () -> CGFloat in
+                        CrosswordUtils.getCrosswordProgress(self.crossword)
+                    }, markAsSolved: self.markAsSolved, isErrorTrackingEnabled: self.$isErrorTrackingEnabled,
+                    errorTrackingEnablementSideEffect: self.errorTrackingEnablementSideEffect)
+
+                ShareCrosswordToolbarButtonView(getShareMessage: self.getShareMessage, isSolved: self.crossword.solved)
+            }
+            .padding(.trailing)
+        }
+    }
+
+    var standardBody: some View {
         VStack {
             if self.showCustomToolbar() {
-                HStack {
-                    CrosswordViewLeadingToolbarView(goBack: self.goBack)
-                        .padding(.leading)
-                    Spacer()
-                    Text(verbatim: self.displayTitle)
-                        .bold()
-                    Spacer()
-                    HStack {
-                        CrosswordSettingsToolbarButtonView(
-                            crosswordTitle: self.crossword.title!, author: self.crossword.author!, notes: self.crossword.notes!,
-                            copyright: self.crossword.copyright!, isSolved: self.crossword.solved, outletName: self.crossword.outletName!,
-                            isSolutionAvailable: CrosswordUtils.isSolutionAvailable(crossword: self.crossword), showSettings: self.showSettings,
-                            showSolution: self.showSolution,
-                            getProgressPercentage: { () -> CGFloat in
-                                CrosswordUtils.getCrosswordProgress(self.crossword)
-                            }, markAsSolved: self.markAsSolved, isErrorTrackingEnabled: self.$isErrorTrackingEnabled,
-                            errorTrackingEnablementSideEffect: self.errorTrackingEnablementSideEffect)
-
-                        ShareCrosswordToolbarButtonView(getShareMessage: self.getShareMessage, isSolved: self.crossword.solved)
-                    }
-                    .padding(.trailing)
-                }
-                .background(self.crossword.solved ? .green : Color(UIColor.systemBackground))
+                self.customToolbar
+                    .background(self.crossword.solved ? .green : Color(UIColor.systemBackground))
             }
 
             ScrollView([.horizontal, .vertical], showsIndicators: false) {
@@ -159,76 +272,216 @@ struct CrosswordView: View {
                     .frame(height: CGFloat(Constants.keybordToolbarHeight))
             }
         }
-        .overlay(alignment: .bottom, content: self.maybePauseScreen)
-        .gesture(
-            DragGesture(minimumDistance: 30, coordinateSpace: .local)
-                .onEnded({ value in
-                    if value.translation.width < 0 && self.focusedTag != -1 {
-                        // left
-                        ChangeFocusUtils.goToPreviousClue(
-                            focusedTag: self.$focusedTag,
-                            crossword: self.crossword,
-                            userSettings: self.userSettings,
-                            goingAcross: self.$goingAcross,
-                            isHighlighted: self.$highlighted)
-                    }
-
-                    if value.translation.width > 0 && self.focusedTag != -1 {
-                        // right
-                        ChangeFocusUtils.goToNextClue(
-                            focusedTag: self.$focusedTag,
-                            crossword: self.crossword,
-                            userSettings: self.userSettings,
-                            goingAcross: self.$goingAcross,
-                            isHighlighted: self.$highlighted)
-                    }
-                })
-        )
-        .toolbar(self.showCustomToolbar() ? .hidden : .automatic)
-        .navigationBarTitle(Text(verbatim: self.displayTitle), displayMode: .inline)
-        .navigationBarColor(self.crossword.solved ? .systemGreen : .systemBackground)
-        .toolbar {
-            ToolbarItem(placement: .topBarLeading) {
-                CrosswordViewLeadingToolbarView(goBack: self.goBack)
-            }
-            .hideSharedBackgroundIfAvailable()
-
-            ToolbarItemGroup(placement: .topBarTrailing) {
-                CrosswordSettingsToolbarButtonView(
-                    crosswordTitle: self.crossword.title!, author: self.crossword.author!, notes: self.crossword.notes!,
-                    copyright: self.crossword.copyright!, isSolved: self.crossword.solved, outletName: self.crossword.outletName!,
-                    isSolutionAvailable: CrosswordUtils.isSolutionAvailable(crossword: self.crossword), showSettings: self.showSettings,
-                    showSolution: self.showSolution,
-                    getProgressPercentage: { () -> CGFloat in
-                        CrosswordUtils.getCrosswordProgress(self.crossword)
-                    }, markAsSolved: self.markAsSolved, isErrorTrackingEnabled: self.$isErrorTrackingEnabled,
-                    errorTrackingEnablementSideEffect: self.errorTrackingEnablementSideEffect)
-
-                ShareCrosswordToolbarButtonView(getShareMessage: self.getShareMessage, isSolved: self.crossword.solved)
-            }
-            .hideSharedBackgroundIfAvailable()
-        }
-        .background {
-            Color.clear
-                .onGeometryChange(for: CGFloat.self) { proxy in
-                    proxy.size.width
-                } action: { newValue in
-                    if abs(self.viewWidth - newValue) > 1 {
-                        self.viewWidth = newValue
-                    }
-                    if !self.isZoomed {
-                        self.boxWidth = self.getInitialBoxWidth()
-                    }
-                }
-        }
-        // custom back button added in leading toolbar view
-        .navigationBarBackButtonHidden(true)
     }
 
-    func showCustomToolbar() -> Bool {
-        // If it's a phone (unless it's Duo), use the custom toolbar.
-        // For Duo, we want the toolbar buttons to appear on the side
-        return self.horizontalSizeClass == .compact && UIScreen.screenHeight > 700
+    // MARK: - Compact and wide layouts
+
+    /// Short, narrow window: toolbar, the whole grid, then the clue bar and built-in keyboard.
+    var compactBody: some View {
+        VStack(spacing: 0) {
+            self.customToolbar
+                .padding(.vertical, 4)
+                .background(self.crossword.solved ? .green : Color(UIColor.systemBackground))
+            self.fittedGridScrollView
+            VStack(spacing: 4) {
+                self.footerRow
+                CrosswordClueBarView(
+                    inputRelay: self.inputRelay, clueID: self.currentClueID, clue: self.currentClue,
+                    isSolutionAvailable: CrosswordUtils.isSolutionAvailable(crossword: self.crossword),
+                    userSettings: self.userSettings)
+                CrosswordKeyboardView(inputRelay: self.inputRelay, keyHeight: Constants.compactKeyHeight)
+                    .padding(.horizontal, 2)
+            }
+            // keep the space reserved while nothing is selected so the grid does not resize
+            .opacity(self.focusedTag == -1 ? 0 : 1)
+            .allowsHitTesting(self.focusedTag != -1)
+            .overlay {
+                if self.focusedTag == -1 {
+                    ScrollView(.vertical) {
+                        self.crosswordInfo
+                            .padding()
+                            .frame(maxWidth: .infinity)
+                    }
+                    .scrollBounceBehavior(.basedOnSize)
+                }
+            }
+        }
+    }
+
+    /// Short, wide window: the grid fills the height, clues and the built-in keyboard sit beside it.
+    var wideBody: some View {
+        HStack(spacing: 0) {
+            self.fittedGridScrollView
+                .padding(.vertical, 6)
+                .padding(.leading, 6)
+            VStack(spacing: 8) {
+                self.customToolbar
+                    .padding(.top, 6)
+                if self.focusedTag != -1 {
+                    CrosswordClueCardView(
+                        inputRelay: self.inputRelay, clueID: self.currentClueID, clue: self.currentClue,
+                        isSolutionAvailable: CrosswordUtils.isSolutionAvailable(crossword: self.crossword),
+                        userSettings: self.userSettings)
+                } else {
+                    self.crosswordInfo
+                        .font(.footnote)
+                        .lineLimit(3)
+                        .frame(maxWidth: .infinity)
+                }
+                CrosswordClueListView(
+                    crossword: self.crossword, currentClueID: self.currentClueID,
+                    notes: self.crossword.notes ?? "",
+                    fontSize: CGFloat(max(13, self.userSettings.clueSize)),
+                    onSelect: self.selectClue)
+                self.footerRow
+                CrosswordKeyboardView(inputRelay: self.inputRelay, keyHeight: Constants.wideKeyHeight)
+                    .opacity(self.focusedTag == -1 ? 0.35 : 1)
+                    .allowsHitTesting(self.focusedTag != -1)
+                    .padding(.bottom, 4)
+            }
+            .padding(.horizontal, 10)
+            .frame(width: self.sidePanelWidth)
+        }
+    }
+
+    var sidePanelWidth: CGFloat {
+        return min(400, max(340, self.windowSize.width * 0.4))
+    }
+
+    /// The footer starts and stops the timer as it comes and goes, so it only exists while a cell is selected.
+    @ViewBuilder
+    var footerRow: some View {
+        if self.focusedTag != -1 {
+            CrosswordFooter(
+                zoom: self.zoom,
+                isZoomed: self.isZoomed,
+                isPaused: self.isPaused,
+                pause: self.pause,
+                solveCell: self.solveCell,
+                isSolved: self.crossword.solved,
+                solvedTime: Int(self.crossword.solvedTime),
+                isRebusMode: self.$isRebusMode,
+                userSettings: self.userSettings
+            )
+            .padding(.horizontal, 10)
+            .frame(height: Constants.footerHeight)
+        } else {
+            Color.clear
+                .frame(height: Constants.footerHeight)
+        }
+    }
+
+    var crosswordInfo: some View {
+        VStack(alignment: .center) {
+            Text(self.crossword.title!)
+            Text(self.crossword.author!)
+            if self.layoutMode != .wide && self.crossword.notes != nil && !self.crossword.notes!.isEmpty {
+                Text(self.crossword.notes!)
+            }
+            Text(self.crossword.copyright!)
+        }
+        .multilineTextAlignment(.center)
+    }
+
+    /// The grid sized to fit the space it is given, centered in it. It only scrolls when zoomed
+    /// or when fitting the whole grid would make the cells too small to tap.
+    var fittedGridScrollView: some View {
+        ScrollView([.horizontal, .vertical], showsIndicators: false) {
+            ScrollViewReader { scrollreader in
+                CrosswordGridView(
+                    crossword: self.crossword, boxWidth: self.boxWidth,
+                    getViewWidth: { self.viewWidth }, synthesizer: self.synthesizer,
+                    userSettings: self.userSettings,
+                    isErrorTrackingEnabled: self.$isErrorTrackingEnabled,
+                    focusedTag: self.$focusedTag,
+                    highlighted: self.$highlighted,
+                    goingAcross: self.$goingAcross,
+                    forceUpdate: self.$forceUpdate,
+                    becomeFirstResponder: self.$becomeFirstResponder,
+                    isRebusMode: self.$isRebusMode,
+                    useSystemKeyboard: false,
+                    inputRelay: self.inputRelay
+                )
+                .onChange(of: self.focusedTag) { _, newFocusedTag in
+                    if newFocusedTag < 0 {
+                        return
+                    }
+                    if self.isZoomed {
+                        scrollreader.scrollTo("cell" + String(newFocusedTag))
+                    } else {
+                        let newRowNumber = CrosswordUtils.getRowNumberFromTag(tag: newFocusedTag, crossword: self.crossword)
+                        scrollreader.scrollTo("row" + String(newRowNumber), anchor: .center)
+                    }
+                }
+                .scrollTargetLayout()
+                .frame(minWidth: self.gridAreaSize.width, minHeight: self.gridAreaSize.height)
+            }
+        }
+        .scrollBounceBehavior(.basedOnSize, axes: [.horizontal, .vertical])
+        .onGeometryChange(for: CGSize.self) { proxy in
+            proxy.size
+        } action: { newValue in
+            self.gridAreaSize = newValue
+            if !self.isZoomed {
+                self.boxWidth = self.fittedBoxWidth(in: newValue)
+            }
+        }
+    }
+
+    func fittedBoxWidth(in area: CGSize) -> CGFloat {
+        if area.width <= 0 || area.height <= 0 || self.crossword.length <= 0 || self.crossword.height <= 0 {
+            return 0
+        }
+        let widthFit = area.width / CGFloat(self.crossword.length)
+        // the hidden text field under the grid takes one point
+        let heightFit = (area.height - 1) / CGFloat(self.crossword.height)
+        let fit = min(widthFit, heightFit)
+        if self.layoutMode == .wide {
+            return min(fit, Constants.maxWideCellSize)
+        }
+        let maxInitialSize = CGFloat(Constants.maxInitialCellSize)
+        if fit >= Constants.minFittedCellSize {
+            return min(fit, maxInitialSize)
+        }
+        // too small to tap when fitted: fill the width and scroll vertically instead
+        return min(widthFit, maxInitialSize)
+    }
+
+    func selectClue(_ clueID: String) {
+        guard let tags = self.crossword.clueToTagsMap?[clueID], let firstTag = tags.first else {
+            return
+        }
+        let firstEmptyTag = tags.first { tag in
+            self.crossword.entry?[safe: tag]?.isEmpty ?? false
+        }
+        self.isRebusMode = false
+        if !self.becomeFirstResponder {
+            self.becomeFirstResponder = true
+        }
+        self.goingAcross = clueID.hasSuffix("A")
+        ChangeFocusUtils.changeFocus(
+            tag: firstEmptyTag ?? firstTag, crossword: self.crossword,
+            goingAcross: self.$goingAcross, focusedTag: self.$focusedTag,
+            isHighlighted: self.$highlighted)
+    }
+
+    func applyDebugLaunchArguments() {
+        #if DEBUG
+            // `-focusClue 17A` selects a clue on open, for screenshots without touch input
+            if let clueID = UserDefaults.standard.string(forKey: "focusClue") {
+                DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) {
+                    self.selectClue(clueID)
+                }
+                // `-typeText ABC` then presses those keys on the built-in keyboard
+                if let text = UserDefaults.standard.string(forKey: "typeText") {
+                    DispatchQueue.main.asyncAfter(deadline: .now() + 1.5) {
+                        for letter in text {
+                            self.inputRelay.insert(String(letter))
+                        }
+                    }
+                }
+            }
+        #endif
     }
 
     func getShareMessage() -> String {
@@ -259,6 +512,9 @@ struct CrosswordView: View {
     }
 
     func getInitialBoxWidth() -> CGFloat {
+        if self.layoutMode != .standard {
+            return self.fittedBoxWidth(in: self.gridAreaSize)
+        }
         let maxInitialSize: CGFloat = CGFloat(Constants.maxInitialCellSize)
         let defaultSize: CGFloat = self.viewWidth / CGFloat(self.crossword.length)
         return min(defaultSize, maxInitialSize)
@@ -278,10 +534,7 @@ struct CrosswordView: View {
         let componentHeights =
             self.componentHeights + navigationBarHeight
             + self.keyboardHeightHelper.keyboardHeight
-        //        print(componentHeights)
-        //        print(UIScreen.main.bounds.size.height)
-        //        print("")
-        return componentHeights > UIScreen.screenHeight
+        return componentHeights > self.windowSize.height
     }
 
     func showSolution() {
@@ -385,7 +638,7 @@ struct CrosswordView: View {
             }
             .frame(
                 minWidth: 0, maxWidth: .infinity, minHeight: 0,
-                maxHeight: UIScreen.screenHeight - 120
+                maxHeight: self.layoutMode == .standard ? self.windowSize.height - 120 : .infinity
             )
             .background(.ultraThinMaterial)
         } else {
@@ -410,6 +663,9 @@ struct CrosswordGridView: View {
     @Binding var becomeFirstResponder: Bool
     @Binding var isRebusMode: Bool
 
+    var useSystemKeyboard: Bool = true
+    var inputRelay: CrosswordInputRelay? = nil
+
     var body: some View {
         let rows: [Int] = Array(0...Int(self.crossword.height) - 1)
         let cols: [Int] = Array(0...Int(self.crossword.length) - 1)
@@ -431,7 +687,9 @@ struct CrosswordGridView: View {
                     highlighted: self.$highlighted, goingAcross: self.$goingAcross,
                     forceUpdate: self.$forceUpdate,
                     becomeFirstResponder: self.$becomeFirstResponder,
-                    isRebusMode: self.$isRebusMode
+                    isRebusMode: self.$isRebusMode,
+                    useSystemKeyboard: self.useSystemKeyboard,
+                    inputRelay: self.inputRelay
                 )
                 .onKeyPress(phases: .down) { press in
                     return OnKeyPressUtils.onKeyPress(

@@ -27,6 +27,10 @@ struct CrosswordTextFieldView: UIViewRepresentable {
     @Binding var becomeFirstResponder: Bool
     @Binding var isRebusMode: Bool
 
+    // false when the layout draws its own keyboard; the field then only listens to hardware keys
+    var useSystemKeyboard: Bool = true
+    var inputRelay: CrosswordInputRelay? = nil
+
     func makeUIView(context: Context) -> NoActionTextField {
         let textField = NoActionTextField(frame: .zero)
         textField.currentViewWidth = self.getViewWidth()
@@ -38,11 +42,31 @@ struct CrosswordTextFieldView: UIViewRepresentable {
             ? UIKeyboardType.emailAddress : UIKeyboardType.asciiCapable
         textField.returnKeyType = UIReturnKeyType.next
         textField.tintColor = UIColor.clear
-        textField.addToolbar(coordinator: context.coordinator)
+        self.configureKeyboard(textField, context: context)
+        self.inputRelay?.textField = textField
         return textField
     }
 
+    private func configureKeyboard(_ textField: NoActionTextField, context: Context) {
+        textField.usesSystemKeyboard = self.useSystemKeyboard
+        if self.useSystemKeyboard {
+            textField.inputView = nil
+            textField.addToolbar(coordinator: context.coordinator)
+        } else {
+            // an empty input view keeps the system keyboard and its toolbar off screen
+            textField.inputView = UIView()
+            textField.inputAccessoryView = nil
+            textField.inputAssistantItem.leadingBarButtonGroups = []
+            textField.inputAssistantItem.trailingBarButtonGroups = []
+        }
+    }
+
     func updateUIView(_ uiTextField: NoActionTextField, context: Context) {
+        if uiTextField.usesSystemKeyboard != self.useSystemKeyboard {
+            self.configureKeyboard(uiTextField, context: context)
+            uiTextField.reloadInputViews()
+        }
+        self.inputRelay?.textField = uiTextField
         if !uiTextField.isFirstResponder && self.becomeFirstResponder {
             DispatchQueue.main.async {
                 uiTextField.becomeFirstResponder()
@@ -51,6 +75,9 @@ struct CrosswordTextFieldView: UIViewRepresentable {
             DispatchQueue.main.async {
                 uiTextField.resignFirstResponder()
             }
+        }
+        if !self.useSystemKeyboard {
+            return
         }
         let clue: String = CrosswordUtils.getClue(
             focusedTag: self.focusedTag,
@@ -290,4 +317,5 @@ class NoActionTextField: UITextField {
     }
 
     var currentViewWidth: CGFloat = 0.0
+    var usesSystemKeyboard: Bool = true
 }

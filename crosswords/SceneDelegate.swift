@@ -35,7 +35,9 @@ class SceneDelegate: UIResponder, UIWindowSceneDelegate {
         // Use a UIHostingController as window root view controller.
         if let windowScene = scene as? UIWindowScene {
             let window = UIWindow(windowScene: windowScene)
-            window.rootViewController = UIHostingController(rootView: crosswordListView)
+            window.rootViewController = WindowSizeHostingController(initialSize: window.bounds.size) {
+                crosswordListView
+            }
             self.window = window
             window.makeKeyAndVisible()
             ColorSchemeUtil().overrideDisplayMode()
@@ -83,7 +85,9 @@ class SceneDelegate: UIResponder, UIWindowSceneDelegate {
 
         if let windowScene = scene as? UIWindowScene {
             let window = UIWindow(windowScene: windowScene)
-            window.rootViewController = UIHostingController(rootView: crosswordListView)
+            window.rootViewController = WindowSizeHostingController(initialSize: window.bounds.size) {
+                crosswordListView
+            }
             self.window = window
             window.makeKeyAndVisible()
             ColorSchemeUtil().overrideDisplayMode()
